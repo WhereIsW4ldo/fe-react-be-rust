@@ -1,9 +1,4 @@
 services:
-  backend:
-    build: ./backend
-    ports:
-      - 5050:5000
-
   postgres:
     image: postgres:14-alpine
     ports:
