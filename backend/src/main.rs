@@ -1,14 +1,15 @@
-use core::fmt;
+use std::fmt;
 use std::process::Command;
-use serde::{Deserialize, Serialize};
-use serde_json::Result;
+use serde::Serialize;
+#[macro_use] extern crate rocket;
 
-fn main() {
-    run_command();
+#[launch]
+fn rocket() -> _ {
+    rocket::build().mount("/", routes![run_command])
 }
 
-
-fn run_command() {
+#[get("/sudo/docker/ps")]
+fn run_command() -> String {
     let output = Command::new("sudo")
         .arg("docker")
         .arg("ps")
@@ -19,23 +20,23 @@ fn run_command() {
 
     let split_string = string.lines().skip(1);
 
-    for line in split_string {
-        println!("{line}");
-        handle_line(line);
-    }
-}
+    let lines = split_string
+        .map(|line| handle_line(line))
+        .flatten()
+        .collect::<Vec<_>>();
 
-fn handle_line(line: &str) {
-    let components: Vec<&str> = line.split("   ").collect();
-
-    if let Some(container) = DockerContainer::new_from_line(&components)
+    if let Ok(data) = serde_json::to_string(&lines)
     {
-        println!("{container}");
+        return data;
     }
 
+    "".to_string()
 }
 
-// CONTAINER ID, IMAGE, COMMAND, CREATED, STATUS, PORTS, NAMES
+fn handle_line(line: &str) -> Option<DockerContainer>{
+    let components: Vec<&str> = line.split("   ").collect();
+    DockerContainer::new_from_line(&components)
+}
 
 #[derive(Debug, Serialize)]
 struct DockerContainer {
@@ -44,7 +45,7 @@ struct DockerContainer {
     command: String,
     created: String,
     status: String,
-    port: String,
+    ports: Vec<String>,
     name: String
 }
 
@@ -56,31 +57,31 @@ impl fmt::Display for DockerContainer {
 }
 
 impl DockerContainer {
-    fn new(id: &str, image: &str, command: &str, created: &str, status: &str, port: &str, name: &str) -> DockerContainer {
-        return DockerContainer {
-            id: String::from(id), 
+    fn new(id: &str, image: &str, command: &str, created: &str, status: &str, ports: &str, name: &str) -> DockerContainer {
+        DockerContainer {
+            id: String::from(id),
             image: String::from(image),
-            command: String::from(command), 
+            command: String::from(command),
             created: String::from(created),
-            status: String::from(status), 
-            port: String::from(port),
-            name: String::from(name), 
-        };
+            status: String::from(status),
+            ports: ports.split(", ").map(String::from).collect(),
+            name: String::from(name),
+        }
     }
 
-    fn new_from_line(info: &Vec<&str>) -> Option<DockerContainer> {
-        let (id, rest) = info.split_first().expect("could not split");  
-        let (image, rest) = rest.split_first().expect("could not split");  
-        let (command, rest) = rest.split_first().expect("could not split");  
-        let (created, rest) = rest.split_first().expect("could not split");  
-        let (status, rest) = rest.split_first().expect("could not split");  
-        let (port, rest) = rest.split_first().expect("could not split");  
+    pub fn new_from_line(info: &Vec<&str>) -> Option<DockerContainer> {
+        let (id, rest) = info.split_first().expect("could not split");
+        let (image, rest) = rest.split_first().expect("could not split");
+        let (command, rest) = rest.split_first().expect("could not split");
+        let (created, rest) = rest.split_first().expect("could not split");
+        let (status, rest) = rest.split_first().expect("could not split");
+        let (ports, rest) = rest.split_first().expect("could not split");
         let name = rest.first().expect("could not take first");
-        
-        Some(DockerContainer::new(id, image, command, created, status, port, name))
+
+        Some(DockerContainer::new(id, image, command, created, status, ports, name))
     }
 
-    fn to_string(&self) -> Result<String> {
-        serde_json::to_string(&self)
+    fn to_string(&self) -> Option<String> {
+        serde_json::to_string(&self).ok()
     }
 }
