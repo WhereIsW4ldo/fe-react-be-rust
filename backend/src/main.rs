@@ -1,11 +1,23 @@
 use std::fmt;
 use std::process::Command;
+use rocket_cors::{AllowedMethods};
 use serde::Serialize;
-#[macro_use] extern crate rocket;
+
+#[macro_use]
+extern crate rocket;
+extern crate rocket_cors;
+
+use rocket::http::Method;
+use rocket_cors::{
+    AllowedHeaders, AllowedOrigins, Error,
+    Cors, CorsOptions
+};
 
 #[launch]
 fn rocket() -> _ {
-    rocket::build().mount("/", routes![run_command])
+    rocket::build()
+        .mount("/", routes![run_command])
+        .attach(make_cors())
 }
 
 #[get("/sudo/docker/ps")]
@@ -84,4 +96,15 @@ impl DockerContainer {
     fn to_string(&self) -> Option<String> {
         serde_json::to_string(&self).ok()
     }
+}
+
+fn make_cors() -> Cors {
+    let allowed_origins = AllowedOrigins::all();
+
+    CorsOptions {
+        allowed_origins,
+        allowed_methods: vec![Method::Get].into_iter().map(From::from).collect(),
+        allowed_headers: AllowedHeaders::All,
+        ..Default::default()
+    }.to_cors().unwrap()
 }
